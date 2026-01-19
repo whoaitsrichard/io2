@@ -168,7 +168,16 @@ res = minimize(
         "disp": True
     }
 )
+# message: Optimization terminated successfully.
+       #success: True
+        #status: 0
+           #fun: 0.0016095645336567485 (doesnt seem below thres?)
+             #x: [ 3.889e+00 -1.046e-01  7.758e-04] # neg. values :(
+           #nit: 133 (low)
+          #nfev: 239
 
+#
+#
 
 
 
