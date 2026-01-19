@@ -17,14 +17,27 @@ inner_tol = 1e-7
 
 # normal distribution. Keep these fixed for all iterations. Although maybe this should go in the outer loop structure?
 v_i = np.random.normal(0.0, 1.0, size=(num_i, 2))
+
+# store instruments, characteristics, obs. shares
 z_inst = np.array(df[['z1','z2','z3','z4','z5','z6']].values)
 z_inst_t = z_inst.T
 obs_shares = np.array(df.shares.values)
-W = np.linalg.inv(z_inst_t @ z_inst)
 x_jt = df[['p','x']].values
 
+# initial W for GMM
+W = np.linalg.inv(z_inst_t @ z_inst)
+
+# Compute initial guess of beta using hom. logit
+#outside_market_share = 1-df.groupby('market')['shares'].transform('sum')
+#ln_st_s0= obs_shares/outside_market_share
+#logit_df = df.copy()
+#logit_df['ln_st_s0'] = ln_st_s0
+#controls = ['x']
+#exog = sm.add_constant(logit_df[['p'] + controls])
+#instr = sm.add_constant(logit_df[['z1', 'z2','z3','z4','z5','z6'] + controls])
+#iv_model = IV2SLS(logit_df['ln_st_s0'], exog, instr).fit()
+
 '''
-Done.
 Calculates the GMM objective given a list of parameters
 '''
 def calc_gmm_obj(temp_xi, temp_W):
@@ -62,7 +75,7 @@ def calc_s_pred(temp_delta, temp_gamma):
 
 # Start with initial guesses of the non-linear parameters
 gamma = np.array([0.1, 0.1, 0.1]) #gamma_{11}, gamma_{21}, gamma_{22} respectively
-beta = [0.5, 0.5] # price coefficient and x coefficient respectively
+#beta = [iv_model.params['p'],iv_model.params['x']] # price coefficient and x coefficient respectively
 delta = np.random.rand(600)
 
 
@@ -149,8 +162,8 @@ res = minimize(
     method="L-BFGS-B",
     options={
         "maxiter": 10_000,
-        "xatol": 1e-8,        # tolerance on x
-        "fatol": 1e-8,        # tolerance on f
+        "xatol": 1e-6,        # tolerance on x
+        "fatol": 1e-6,        # tolerance on f
         "disp": True
     }
 )
