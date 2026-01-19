@@ -11,9 +11,10 @@ from scipy.optimize import minimize
 
 df = pd.read_csv('data/ps1_ex4.csv')
 
-num_i = 10000 # 1000 simulated consumers
+num_i = 200 # 1000 simulated consumers
 outer_tol = 1e-6
-inner_tol = 1e-7
+inner_tol = 1e-5
+
 
 # normal distribution. Keep these fixed for all iterations. Although maybe this should go in the outer loop structure?
 v_i = np.random.normal(0.0, 1.0, size=(num_i, 2))
@@ -61,9 +62,9 @@ def calc_s_pred(temp_delta, temp_gamma):
     numerator = temp_delta_proj + numerator
     numerator = numerator.reshape(numerator.shape[0],100,6)
     numerator = np.exp(numerator)
-    denom = numerator.sum(axis=2) + 1 # (10000, 100)
+    denom = numerator.sum(axis=2) + 1 # (num_i, 100)
 
-    ratio = numerator / denom[..., None]  # denom -> (10000,100,1), broadcasts to (10000,100,6)
+    ratio = numerator / denom[..., None]  # denom -> (num_i,100,1), broadcasts to (num_i,100,6) 
 
     s_jk = ratio.mean(axis=0)
     s_jk = s_jk.reshape(600,)
@@ -159,7 +160,7 @@ res = minimize(
     calc_opt_W,
     x0=[0.1,0.1,0.1],
     args=(delta,),                 # or args=(data1, data2, ...)
-    method="L-BFGS-B",
+    method="Nelder-Mead",
     options={
         "maxiter": 10_000,
         "xatol": 1e-6,        # tolerance on x
