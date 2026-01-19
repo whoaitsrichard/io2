@@ -1,6 +1,5 @@
 '''
 Things that could cause issues in the future
-1. We divide by 600 twice in the gmm obj
 
 '''
 import numpy as np
@@ -11,7 +10,7 @@ from scipy.optimize import minimize
 
 df = pd.read_csv('data/ps1_ex4.csv')
 
-num_i = 200 # 1000 simulated consumers
+num_i = 200 # 200 simulated consumers
 outer_tol = 1e-6
 inner_tol = 1e-5
 
