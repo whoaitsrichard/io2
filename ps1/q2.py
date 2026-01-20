@@ -84,7 +84,44 @@ print(avg_mc)
 avg_prices = reg_df.groupby('Product')['Prices'].mean()
 print(avg_prices)
 
-# No it cannot be differences in marginal costs. The 
 
-# Now let's do a counterfactual exercise where product j exits the market. This is the same as 
-# setting the price of product j equal to infinity and recalculating the new optimal prices and market shares of remaining products
+# Now let's do a counterfactual exercise where product 1 exits the market
+df2 = df[df['Product'] != 0].copy()
+df2['mc'] = np.asarray(mc_list, dtype=float).reshape(-1)
+df['mc'] = df2['mc']
+del df2
+
+# Counterfactual shares after removing product 1 
+s1_old = df['Shares'].where(df['Product'].eq(1)).groupby(df['market']).transform('max')                    
+df['Shares_new'] = df['Shares'] / (1.0 - s1_old)
+df['Shares_new'] = df['Shares_new'].where(~df['Product'].isin([0, 1]), np.nan)
+
+#Counterfactual prices
+df['Prices_new'] = df['mc'].values + (1/(alpha*(1-df['Shares_new'].values)))
+
+new_p_shares = (
+    df[df['Product'] != 0].groupby("Product")
+      .agg(
+          avg_new_price=('Prices_new', 'mean'),
+          avg_old_price=('Prices', 'mean'),
+          avg_new_share=('Shares_new', 'mean'),
+          avg_old_share=('Shares', 'mean'),
+      )
+)
+print(new_p_shares)
+
+# Compute Change in Firm Profits
+df['delta_profit'] = (df['Shares_new'].values*(df['Prices_new'].values-df['mc'].values))-(df['Shares'].values*(df['Prices'].values-df['mc'].values))
+
+delta_profit = df[df['Product'] != 0].groupby("Product")['delta_profit'].mean()
+
+print(delta_profit)
+
+# Compute change in welfare
+## calculate new outside shares
+df2 = df[df['Product']!=0].copy()
+df2['oo_old'] = 1 - df2.groupby('market')['Shares'].transform('sum')
+df2['oo_new'] = 1 - df2.groupby('market')['Shares_new'].transform('sum')
+
+delta_welfare = np.mean(np.log((1-df2['oo_new'])/df2['oo_new'])-np.log((1-df2['oo_old'])/df2['oo_old']))
+print(delta_welfare)
