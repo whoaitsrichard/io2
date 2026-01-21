@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.sandbox.regression.gmm import IV2SLS
+from scipy.optimize import fixed_point
 
 df = pd.read_csv('data/ps1_ex2.csv')
 
@@ -44,7 +45,11 @@ iv_model = IV2SLS(reg_df['y'], exog, instr).fit()
 print(iv_model.summary())
 
 alpha = -iv_model.params['Prices']
+beta = iv_model.params['x']
 
+# Use estimated parameters to compute xi
+df['xi'] = df['y'].values + alpha * df['Prices'].values - beta * df['x'].values
+ 
 # Calculate own and cross price elasticities
 # epsilon_jj = -alpha * p_j * (1 - s_j)
 # epsilon_jk = alpha * p_k * s_k
@@ -84,7 +89,7 @@ print(avg_mc)
 avg_prices = reg_df.groupby('Product')['Prices'].mean()
 print(avg_prices)
 
-
+### This Code Needs to Be Changed ### (See q2_4.py)
 # Now let's do a counterfactual exercise where product 1 exits the market
 df2 = df[df['Product'] != 0].copy()
 df2['mc'] = np.asarray(mc_list, dtype=float).reshape(-1)
@@ -125,3 +130,60 @@ df2['oo_new'] = 1 - df2.groupby('market')['Shares_new'].transform('sum')
 
 delta_welfare = np.mean(np.log((1-df2['oo_new'])/df2['oo_new'])-np.log((1-df2['oo_old'])/df2['oo_old']))
 print(delta_welfare)
+
+
+###############################################################
+# New Code for Part 4,5 #-- Wrote Using AI
+
+# Keep only X's,Xi's, MCs and Relevant products
+df2 = df[df['Product'] != 0].copy()
+df2['mc'] = np.asarray(mc_list, dtype=float).reshape(-1)
+df2 = df2[df2['Product']!= 1].copy()
+df2 = df2.loc[:,['Prices','market', 'Product','x','mc','Shares', 'xi']]
+
+# Define Product Market Share Function in order to compute fixed point
+def share_update(s_guess, df, eps=1e-8):
+    s = np.asarray(s_guess, dtype=float)
+    s = np.clip(s, eps, 1 - eps)  # keep in (0,1)
+    price = df['mc'].values + (1.0 / (alpha * (1.0 - s)))
+
+    v = (-alpha * price) + (beta * df['x'].values) + df['xi'].values
+    exp_v = np.exp(v)
+
+    denom = 1.0 + df.assign(exp_v=exp_v).groupby('market')['exp_v'].transform('sum').values
+    return exp_v / denom
+
+
+# compute new shares, prices using fixed point algorithm
+df2['New_Shares']= fixed_point(share_update, df2['Shares'].values, args=(df2,), xtol=1e-10, maxiter=1000)
+df2['New_Prices'] = df2['mc'].values + (1.0 / (alpha * (1.0 - df2['New_Shares'].values)))
+
+
+new_p_shares = (
+    df2.groupby("Product")
+      .agg(
+          avg_new_price=('New_Prices', 'mean'),
+          avg_old_price=('Prices', 'mean'),
+          avg_new_share=('New_Shares', 'mean'),
+          avg_old_share=('Shares', 'mean'),
+      )
+)
+print(new_p_shares)
+
+# Compute Change in Firm Profits
+df2['delta_profit'] = (df2['New_Shares'].values*(df2['New_Prices'].values-df2['mc'].values))-(df2['Shares'].values*(df2['Prices'].values-df2['mc'].values))
+
+delta_profit = df2.groupby("Product")['delta_profit'].mean()
+
+print(delta_profit)
+
+# Compute change in welfare
+## calculate new outside shares
+df2['oo_new'] = 1 - df2.groupby('market')['New_Shares'].transform('sum')
+new_share = df2.groupby('market')['oo_new'].first()
+old_share = df.groupby('market')['oo'].first()
+
+delta_welfare = np.mean(np.log((1-new_share)/new_share)-np.log((1-old_share)/old_share))
+print(delta_welfare)
+
+########################################################################
