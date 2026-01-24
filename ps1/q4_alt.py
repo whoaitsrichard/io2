@@ -12,9 +12,9 @@ from scipy.optimize import basinhopping
 
 df = pd.read_csv('data/ps1_ex4.csv')
 
-num_i = 100 # 100 simulated consumers
+num_i = 200 # 100 simulated consumers
 outer_tol = 1e-6
-inner_tol = 1e-5
+inner_tol = 1e-9
 
 
 # normal distribution. Keep these fixed for all iterations. Although maybe this should go in the outer loop structure?
@@ -83,6 +83,63 @@ def calc_own_price(mu, var,N):
     own_price_est = integrand.mean(axis=0) * p_over_s_jt
     return own_price_est
 
+'''
+Calculates cross-price elasticities using numerical integration
+'''
+def calc_cross_price_rc(delta_opt, gamma_opt, N=1000):                                                                                       
+      """                                                                                                                                      
+      Cross-price elasticities using individual-level shares from RC model.                                                                    
+      Returns (100, 6, 6) array.                                                                                                               
+      """                                                                                                                                      
+      np.random.seed(44259)                                                                                                                    
+      v_i = np.random.normal(0.0, 1.0, size=(N, 2))                                                                                            
+                                                                                                                                               
+      L = gamma_opt  # (2, 2) Cholesky factor                                                                                                  
+      w = (L @ v_i.T).T  # (N, 2) - random coefficients for each consumer                                                                      
+                                                                                                                                               
+      # Price coefficient for each consumer: α_i = β_p + σ_p * v_i1                                                                            
+      alpha_i = beta_opt_global[0] + w[:, 0]  # (N,)                                                                                           
+                                                                                                                                               
+      # Reshape data by market                                                                                                                 
+      delta_by_market = delta_opt.reshape(100, 6)                                                                                              
+      x_by_market = x_jt.reshape(100, 6, 2)                                                                                                    
+      prices_by_market = df['p'].values.reshape(100, 6)                                                                                        
+      shares_by_market = obs_shares.reshape(100, 6)                                                                                            
+                                                                                                                                               
+      # Compute μ_{ijm} = x_jm · w_i for all markets, products, consumers                                                                      
+      mu = np.einsum('mjk,ik->mji', x_by_market, w)  # (100, 6, N)                                                                             
+                                                                                                                                               
+      # Utility: u_{ijm} = δ_{jm} + μ_{ijm}                                                                                                    
+      u = delta_by_market[:, :, None] + mu  # (100, 6, N)                                                                                      
+                                                                                                                                               
+      # Individual choice probabilities (within each market)                                                                                   
+      exp_u = np.exp(u)                                                                                                                        
+      denom = exp_u.sum(axis=1) + 1  # (100, N)                                                                                                
+      s_ij = exp_u / denom[:, None, :]  # (100, 6, N)                                                                                          
+                                                                                                                                               
+      # E[α_i · s_{ij} · s_{ik}] for all (j,k) pairs                                                                                           
+      s_jk = s_ij[:, :, None, :] * s_ij[:, None, :, :]  # (100, 6, 6, N)                                                                       
+      integrand = alpha_i[None, None, None, :] * s_jk                                                                                          
+      E_alpha_sjsk = integrand.mean(axis=3)  # (100, 6, 6)                                                                                     
+                                                                                                                                               
+      # E[α_i · s_{ij}] for own-price elasticity                                                                                               
+      E_alpha_sj = (alpha_i[None, None, :] * s_ij).mean(axis=2)  # (100, 6)                                                                    
+                                                                                                                                               
+      # p_k / s_j                                                                                                                              
+      p_over_s = prices_by_market[:, None, :] / shares_by_market[:, :, None]                                                                   
+                                                                                                                                               
+      # Cross-price: η_{jk} = -(p_k / s_j) · E[α_i · s_{ij} · s_{ik}]                                                                          
+      cross_price_matrices = -E_alpha_sjsk * p_over_s                                                                                          
+                                                                                                                                               
+      # Own-price (diagonal): η_{jj} = (p_j / s_j) · E[α_i · s_{ij} · (1 - s_{ij})]                                                            
+      for j in range(6):                                                                                                                       
+          own_price = (E_alpha_sj[:, j] - E_alpha_sjsk[:, j, j])                                                                               
+          cross_price_matrices[:, j, j] = (                                                                                                    
+              prices_by_market[:, j] / shares_by_market[:, j]                                                                                  
+          ) * own_price                                                                                                                        
+                                                                                                                                               
+      return cross_price_matrices    
+
 
 ##################
 # INIT VARIABLES #
@@ -118,15 +175,17 @@ def calc_opt_W(temp_gamma, delta0):
     controls = ['x']
     # Regressors: const + endogenous + controls
     exog = sm.add_constant(reg_df[['p'] + controls])
+    # exog = reg_df[['p'] + controls]
 
     # Instruments: const + excluded instrument(s) + controls
     instr = sm.add_constant(reg_df[['z1','z2','z3','z4','z5','z6'] + controls])
+    # instr = reg_df[['z1','z2','z3','z4','z5','z6'] + controls]
     iv_model = IV2SLS(reg_df['y'], exog, instr).fit()
     beta = iv_model.params.values[1:]
-
+    # beta = iv_model.params.values
     # Estimate xi, unobserved product heterogeneity
     # xi = delta - np.mult(reg_df[['p','x']].values, beta)
-    xi = delta - reg_df[['p','x']].values @ beta
+    xi = delta - reg_df[['p','x']].values @ beta - iv_model.params.values[0]
     xi_opt_global = xi  # Store xi
 
     # Calculate moment res which is something with the instruments and the 
@@ -157,15 +216,19 @@ def blp_obj(temp_gamma, delta0):
 
     # Regressors: const + endogenous + controls
     exog = sm.add_constant(reg_df[['p'] + controls])
+    # exog = reg_df[['p'] + controls]
 
     # Instruments: const + excluded instrument(s) + controls
     instr = sm.add_constant(reg_df[['z1','z2','z3','z4','z5','z6'] + controls])
+    # Include version with no constant
+    # instr = reg_df[['z1','z2','z3','z4','z5','z6'] + controls]
     iv_model = IV2SLS(reg_df['y'], exog, instr).fit()
     beta = iv_model.params.values[1:]
+    # beta = iv_model.params.values
     beta_opt_global = beta
 
     # Estimate xi, unobserved product heterogeneity
-    xi = delta - reg_df[['p','x']].values @ beta
+    xi = delta - reg_df[['p','x']].values @ beta - iv_model.params.values[0]
 
     # Calculate moment res which is something with the instruments and the 
     gmm_obj = calc_gmm_obj(xi, W_opt)
@@ -183,9 +246,9 @@ res = minimize(
     args=(delta,),                 # or args=(data1, data2, ...)
     method="Nelder-Mead",
     options={
-        "maxiter": 500,
+        "maxiter": 1000,
         "xatol": 1e-6,        # tolerance on x
-        "fatol": 1e-6,        # tolerance on f
+        "fatol": 1e-8,        # tolerance on f
         "disp": True
     }
 )
@@ -206,9 +269,9 @@ res2 = minimize(
     args=(delta_opt_global,),  # Use optimized delta from step 1
     method="Nelder-Mead",
     options={
-        "maxiter": 500,
+        "maxiter": 1000,
         "xatol": 1e-6,        # tolerance on x
-        "fatol": 1e-6,        # tolerance on f
+        "fatol": 1e-8,        # tolerance on f
         "disp": True
     })
 
@@ -219,14 +282,15 @@ Omega_opt = gamma_opt @ gamma_opt.T
 
 print(beta_opt_global)
 '''
-[-1.405113    0.88031527]
+[-1.60267124  1.12718513]
+
 '''
 print(gamma_opt)
 
 print(Omega_opt)
 '''
-[[11.81344936 -0.42772071]
- [-0.42772071  0.01584006]]
+[[17.74390595 22.27206761]
+ [22.27206761 30.42147995]]
 '''
 
 np.linalg.det(Omega_opt)
@@ -235,28 +299,29 @@ np.linalg.det(Omega_opt)
 df['own_price_e'] = calc_own_price(beta_opt_global[0], Omega_opt[0,0],1000)
 mean_own_price_e = df.groupby('choice')['own_price_e'].mean()
 print(mean_own_price_e)
-# Nelson Mead with Basin Hopping (Global Optimizer)
 
-# Define minimizer kwargs for the local optimizer (Nelder-Mead)
-minimizer_kwargs = {
-    "method": "Nelder-Mead",
-    "args": (delta,),
-    "options": {
-        "maxiter": 500,
-        "xatol": 1e-8,
-        "fatol": 1e-8,
-    }
-}
+# Calculate Cross Price Elasticities using RC model
+cross_price_matrices = calc_cross_price_rc(delta_opt_global, gamma_opt, N=1000)
 
-# Run basinhopping
-res = basinhopping(
-    calc_opt_W,
-    x0=[0.1, 0.1, 0.1],
-    minimizer_kwargs=minimizer_kwargs,
-    niter=10,          # number of basin hopping iterations
-    T=1.0,             # temperature for acceptance criterion
-    stepsize=1,      # initial step size for random perturbations
-    seed=44259,           # for reproducibility
-    disp=True
+# Mean elasticity matrix across all 100 markets
+mean_cross_price_e = cross_price_matrices.mean(axis=0)
+
+# Print mean cross-price elasticity matrix
+pd.set_option('display.precision', 3)
+cross_price_df = pd.DataFrame(
+    mean_cross_price_e,
+    columns=[f'Prod {i+1}' for i in range(6)],
+    index=[f'Prod {i+1}' for i in range(6)]
 )
+print("\nMean Cross-Price Elasticity Matrix (averaged across markets):")
+print("Rows = product j whose share changes, Columns = product k whose price changes")
+print(cross_price_df)
 
+# Show elasticity matrix for a single market as example
+print("\nCross-Price Elasticity Matrix for Market 1:")
+market1_df = pd.DataFrame(
+    cross_price_matrices[0],
+    columns=[f'Prod {i+1}' for i in range(6)],
+    index=[f'Prod {i+1}' for i in range(6)]
+)
+print(market1_df)
