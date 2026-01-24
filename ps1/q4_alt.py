@@ -212,10 +212,23 @@ res2 = minimize(
         "disp": True
     })
 
-
+print(beta_opt_global)
 gamma_opt= np.insert(res2.x,1,0)
 gamma_opt = np.reshape(gamma_opt,(2,2))
 Omega_opt = gamma_opt @ gamma_opt.T
+
+print(beta_opt_global)
+'''
+[-1.405113    0.88031527]
+'''
+print(gamma_opt)
+
+print(Omega_opt)
+'''
+[[11.81344936 -0.42772071]
+ [-0.42772071  0.01584006]]
+'''
+
 np.linalg.det(Omega_opt)
 
 # Calculate Own Price Elasticities
