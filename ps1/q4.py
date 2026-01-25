@@ -212,11 +212,6 @@ def calc_jk_elas(lin_p, nlin_p, N=1000):
     # Cross-price: negative sign convention
     cross_price_matrices = -E_alpha_sjsk * p_over_s
 
-    # Own-price diagonal adjustment
-    for j in range(6):
-        own = (E_alpha_sj[:, j] - E_alpha_sjsk[:, j, j])
-        cross_price_matrices[:, j, j] = (prices_by_market[:, j] / shares_by_market[:, j]) * own
-
     # Average across markets -> (6,6)
     mean_cross = cross_price_matrices.mean(axis=0)
     return mean_cross
