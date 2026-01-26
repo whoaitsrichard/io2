@@ -1,7 +1,4 @@
-'''
-Things that could cause issues in the future
 
-'''
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -329,11 +326,6 @@ res = minimize(
         "disp": True
     }
 )
-# message: Optimization terminated successfully.
-         #Current function value: 0.001625
-         #Iterations: 118
-        # Function evaluations: 210
-
  #Compute new W matrix: W = (1/J * Z' * diag(xi^2) * Z)^-1
 J = 6
 W_opt = np.linalg.inv((1/J) * (z_inst.T @ np.diag((xi_opt_global**2).flatten()) @ z_inst))

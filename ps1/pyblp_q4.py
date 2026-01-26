@@ -33,15 +33,15 @@ mc_integration = pyblp.Integration('monte_carlo', size=1000, specification_optio
 mc_integration
 
 # Define problem to solve
-mc_problem = pyblp.Problem(product_formulations, product_data, integration=mc_integration)
-mc_problem
+problem = pyblp.Problem(product_formulations, product_data, integration=mc_integration)
+problem
 
 # configure optimization method
 bfgs = pyblp.Optimization('bfgs', {'gtol': 1e-6})
 bfgs
 
-# Test results 
-results1 = mc_problem.solve(sigma=np.ones((2, 2)), optimization=bfgs)
+# results 
+results1 = problem.solve(sigma=np.ones((2, 2)), optimization=bfgs)
 results1
 
 '''
@@ -73,11 +73,3 @@ Beta Estimates (Robust SEs in Parentheses):
 ===========================================
 '''
 
-'''
-[-1.405113    0.88031527]
-'''
-
-'''
-[[11.81344936 -0.42772071]
- [-0.42772071  0.01584006]]
-'''
