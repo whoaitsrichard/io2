@@ -9,6 +9,37 @@ from scipy.optimize import basinhopping
 
 df = pd.read_csv('data/ps1_ex4.csv')
 
+# output summary statistics
+df.groupby('choice')['p'].mean()
+'''
+choice
+1    0.002439
+2    0.002286
+3    2.019113
+4    1.751616
+5    3.576978
+6    4.442894
+'''
+df.groupby('choice')['x'].mean()
+'''
+1   -0.019330
+2   -0.026036
+3   -0.081252
+4   -0.180135
+5    1.692610
+6    2.002366
+'''
+df.groupby('choice')['shares'].mean()
+'''
+choice
+1    0.098810
+2    0.089131
+3    0.043009
+4    0.039323
+5    0.151714
+6    0.193238
+'''
+
 num_i = 200 # 100 simulated consumers
 outer_tol = 1e-6
 inner_tol = 1e-9
