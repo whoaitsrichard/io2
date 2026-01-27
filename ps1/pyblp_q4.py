@@ -72,3 +72,13 @@ Beta Estimates (Robust SEs in Parentheses):
 (+7.7456E-01)  (+1.0894E+00)  (+6.0217E-01)
 ===========================================
 '''
+
+# Calculate elasticities
+elasticities = results1.compute_elasticities()
+avg_elasticities = elasticities.reshape(100, 6, 6).mean(axis=0)                                                                                             
+print(avg_elasticities)
+# Print in pretty format
+for i in range(avg_elasticities.shape[0]):
+    row = ["{:+1.8f}".format(val) for val in avg_elasticities[i]]
+    print("[" + "  ".join(row) + "]")
+    

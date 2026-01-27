@@ -4,7 +4,6 @@ import pandas as pd
 import statsmodels.api as sm
 from statsmodels.sandbox.regression.gmm import IV2SLS
 from scipy.optimize import minimize
-from scipy.optimize import basinhopping
 
 
 df = pd.read_csv('data/ps1_ex4.csv')
@@ -40,14 +39,12 @@ choice
 6    0.193238
 '''
 
-num_i = 200 # 100 simulated consumers
-outer_tol = 1e-6
-inner_tol = 1e-9
+num_i = 200 # simulated consumers
+outer_tol = 1e-6 # tolerance for GMM identification condition
+inner_tol = 1e-9 # tolerance for contraction mapping of product specific means
 
-
-# normal distribution. Keep these fixed for all iterations. Although maybe this should go in the outer loop structure?
 np.random.seed(44259)
-v_i = np.random.normal(0.0, 1.0, size=(num_i, 2))
+v_i = np.random.normal(0.0, 1.0, size=(num_i, 2)) # random draws for preferences for consumers
 
 # store instruments, characteristics, obs. shares
 z_inst = np.array(df[['z1','z2','z3','z4','z5','z6']].values)
@@ -78,16 +75,18 @@ def calc_gmm_obj(temp_xi, temp_W):
     return gmm_temp
 
 '''
-Calculates the predicted market shares
+Calculates the predicted market shares given product specific mean and preferences from random draws
 '''
 def calc_s_pred(temp_delta, temp_gamma):
+    # Reshape gamma into matrix
     temp_gamma = np.insert(temp_gamma,1,0)
     temp_gamma = np.reshape(temp_gamma,(2,2))
 
-    # temp_delta is 600x1, 
+    # temp_delta is 600x1, broadcast for each specific consumer
     temp_delta_proj = np.broadcast_to(temp_delta, (num_i,) + temp_delta.shape)
     x_jt_proj = np.broadcast_to(x_jt, (num_i,) + x_jt.shape)
 
+    # Calculate individual specific utilities and choice probabilities
     w = (temp_gamma @ v_i.T).T          # (num_i, 2)
     numerator = np.einsum('ijk,ik->ij', x_jt_proj, w)   # (num_i, 600)
     numerator = temp_delta_proj + numerator
@@ -102,17 +101,7 @@ def calc_s_pred(temp_delta, temp_gamma):
     return s_jk
 
 '''
-Calculates own-price elasticities using numerical integretation
-'''
-# def calc_own_price(mu, var,N):
-#     np.random.seed(44259)
-#     alpha_draws = np.random.normal(mu, np.sqrt(var), size=(N, 1))
-#     integrand = alpha_draws * obs_shares.T * (1-obs_shares.T) 
-#     own_price_est = integrand.mean(axis=0) * p_over_s_jt
-#     return own_price_est
-
-'''
-Calculates own price elasticity using numerical integration
+Calculates own price elasticity by taking expectation over simulated consumers
 Inputs: 
     lin_p - linear parameters
     nlin_p - nonlinear parameters
@@ -136,7 +125,7 @@ def calc_jj_elas(lin_p, nlin_p, N):
     # consumer_draws is (N, 2). Repeat each consumer's draws across 600 products -> (N, 600, 2)
     draw_cols = np.repeat(consumer_draws[:, None, :], temp_arr.shape[0], axis=1)
 
-# Concatenate along last axis to get (N, 600, 5)
+    # Concatenate along last axis to get (N, 600, 5)
     temp_proj = np.concatenate([base_expanded, draw_cols], axis=2)
 
     # Compute utility as:
@@ -184,7 +173,7 @@ def calc_jj_elas(lin_p, nlin_p, N):
     elas = elas.mean(axis=0)  # (6,)
     return elas
 '''
-Calculates cross-price elasticities using numerical integration
+Calculates cross-price elasticities with simulated consumers
 '''
 def calc_jk_elas(lin_p, nlin_p, N=1000):
     """
@@ -251,13 +240,14 @@ def calc_jk_elas(lin_p, nlin_p, N=1000):
 
 # Start with initial guesses of the non-linear parameters
 gamma = np.array([0.1, 0.1, 0.1]) #gamma_{11}, gamma_{21}, gamma_{22} respectively
-#beta = [iv_model.params['p'],iv_model.params['x']] # price coefficient and x coefficient respectively
 delta = np.random.rand(600)
 xi_opt_global = None
 delta_opt_global = None
 beta_opt_global = None
 
 '''
+Basically the same as blp_obj but need to distinguish it and just call it once to calculate
+optimal GMM weighting matrix.
 '''
 def calc_opt_W(temp_gamma, delta0):
     global xi_opt_global, delta_opt_global
@@ -279,23 +269,19 @@ def calc_opt_W(temp_gamma, delta0):
     controls = ['x']
     # Regressors: const + endogenous + controls
     exog = sm.add_constant(reg_df[['p'] + controls])
-    # exog = reg_df[['p'] + controls]
 
     # Instruments: const + excluded instrument(s) + controls
     instr = sm.add_constant(reg_df[['z1','z2','z3','z4','z5','z6'] + controls])
-    # instr = reg_df[['z1','z2','z3','z4','z5','z6'] + controls]
     iv_model = IV2SLS(reg_df['y'], exog, instr).fit()
     beta = iv_model.params.values[1:]
-    # beta = iv_model.params.values
     # Estimate xi, unobserved product heterogeneity
-    # xi = delta - np.mult(reg_df[['p','x']].values, beta)
     xi = delta - reg_df[['p','x']].values @ beta - iv_model.params.values[0]
     xi_opt_global = xi  # Store xi
 
     # Calculate moment res which is something with the instruments and the 
     gmm_obj = calc_gmm_obj(xi, W)
     print(gmm_obj)
-    return gmm_obj  # return both objective and xi, xi
+    return gmm_obj
 
 
 
@@ -321,15 +307,12 @@ def blp_obj(temp_gamma, delta0):
 
     # Regressors: const + endogenous + controls
     exog = sm.add_constant(reg_df[['p'] + controls])
-    # exog = reg_df[['p'] + controls]
 
     # Instruments: const + excluded instrument(s) + controls
     instr = sm.add_constant(reg_df[['z1','z2','z3','z4','z5','z6'] + controls])
     # Include version with no constant
-    # instr = reg_df[['z1','z2','z3','z4','z5','z6'] + controls]
     iv_model = IV2SLS(reg_df['y'], exog, instr).fit()
     beta = iv_model.params.values[1:]
-    # beta = iv_model.params.values
     beta_opt_global = beta
 
     # Estimate xi, unobserved product heterogeneity
@@ -344,7 +327,6 @@ def blp_obj(temp_gamma, delta0):
 
 # Calculate init optimal IV matrix
 # Use Nelder-Mead
-
 res = minimize(
     calc_opt_W,
     x0=[4.19,4.911,-1.820],
