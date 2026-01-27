@@ -344,6 +344,9 @@ res2 = minimize(
         "disp": True
     })
 
+# Re-evaluate at optimal gamma to ensure beta_opt_global corresponds to res2.x
+blp_obj(res2.x, delta_opt_global)
+
 print(beta_opt_global)
 gamma_opt= np.insert(res2.x,1,0)
 gamma_opt = np.reshape(gamma_opt,(2,2))

@@ -6,6 +6,28 @@ from scipy.optimize import fixed_point
 
 df = pd.read_csv('data/ps1_ex2.csv')
 
+# Summary stats
+df.groupby('Product')['Prices'].mean()
+'''
+Product
+1    3.359951
+2    3.367534
+3    3.033056
+4    3.039771
+5    3.031028
+6    3.038147
+'''
+df.groupby('Product')['Shares'].mean()
+'''
+Product
+1    0.202451
+2    0.203076
+3    0.090349
+4    0.088941
+5    0.088172
+6    0.090688
+'''
+
 # Create outside option. For each market, share of outside option is 1 - sum of inside shares
 market_share_sums = df.groupby('market')['Shares'].transform('sum')
 df['oo'] = 1 - market_share_sums
