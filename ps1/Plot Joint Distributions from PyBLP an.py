@@ -15,8 +15,8 @@ pyblp_cov = np.sqrt([[19.754, 21.955 ],
  [21.955,  27.527]])
 
 # Create grid
-x = np.linspace(-10, 10, 1000)
-y = np.linspace(-10, 10, 1000)
+x = np.linspace(-10, 10, 5000)
+y = np.linspace(-10, 10, 5000)
 X, Y = np.meshgrid(x, y)
 
 # Stack X and Y to create position array
