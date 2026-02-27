@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-from scipy import stats
+from scipy import stats 
+from scipy.stats import norm, truncnorm
+from scipy.optimize import minimize
+from scipy.stats import gaussian_kde
 import math
 '''
 Part 2: Simulate values and report summary stats
@@ -80,5 +83,83 @@ Part 6: Use Song (2004) to estimate bid distribution
 Assume Normal Distribution
 Use first-second order statistic, first-third order statistics
 '''
+# Prepare Data
+
+highest_bids = np.array(bid_df.groupby('auction')['submitted_bids'].max())
+bid_df = bid_df.sort_values(by=['auction', 'submitted_bids'], ascending=[True, False])
+second_highest_bids =  np.array(bid_df.groupby('auction')['submitted_bids'].nth(1))
+third_highest_bids =  np.array(bid_df.groupby('auction')['submitted_bids'].nth(2))
+auction = np.array(range(1,1001))
+
+estimation_df = pd.DataFrame({
+    "auction": auction,
+    "first_ord": highest_bids,
+    "second_ord": second_highest_bids,
+    "third_ord": third_highest_bids
+})
 
 # Song (2004) Approach, First-Second highest order statistic
+## Function thatcomputes log likelihood given \sigma \mu
+
+a = estimation_df['second_ord'].min()
+def ll_first_sec(params):
+    mu, sigma = params
+    a_2 = (a-mu)/sigma
+    if sigma <= 0:
+        return np.inf
+    df = estimation_df.drop(columns = ['third_ord'])
+    df = df.dropna()
+    num = truncnorm.pdf(df['first_ord'].values,a=a_2,b=b, loc = mu, scale = sigma)
+    denom = 1-truncnorm.cdf(df['second_ord'].values,a=a_2,b=b,loc = mu, scale = sigma)
+    ll = -np.mean(np.log(num/denom))
+    return ll
+
+est = minimize(ll_first_sec, x0=[1,2], bounds=[(None,None),(1e-6,None)], method="L-BFGS-B")
+
+est.x
+a_2 = (a-est.x[0])/est.x[1]
+
+# Plot values and estimated histogram
+truncated_bids_1  = [x for x in bid_df.submitted_bids if x> a]
+truncated_values_1  = [x for x in bid_df.value if x> a]
+plt.hist(truncated_bids_1,bins=50,density=True,color='skyblue',edgecolor='black', alpha=0.4,label="Bids")
+plt.hist(truncated_values_1,bins=50,density=True,color='forestgreen',edgecolor='black', alpha=0.4,label="Values")
+grid = np.linspace(bid_df.value.min(), bid_df.value.max(), 400)
+plt.plot(grid, truncnorm.pdf(grid,a=a_2,b=b,loc=est.x[0], scale=est.x[1]), linewidth=2)
+plt.xlabel('Valuations')
+plt.ylabel('Frequency')
+plt.title('Truncated Values and Est. Distribution, 1st & 2nd Order Method ')
+plt.legend()
+plt.show()
+
+# Song (2004) Approach, First-Third highest order statistic
+## Function that computes log likelihood given \sigma \mu
+a_3 = estimation_df['third_ord'].min()
+def ll_first_third(params):
+    mu, sigma = params
+    if sigma <= 0:
+        return np.inf
+    df = estimation_df.drop(columns = ['second_ord'])
+    df = df.dropna()
+    num_1 = 2 * truncnorm.pdf(df['first_ord'].values,a=a_3,b=b,loc = mu, scale = sigma)
+    num_2 = truncnorm.cdf(df['first_ord'].values,a=a_3,b=b,loc = mu, scale = sigma)-truncnorm.cdf(df['third_ord'].values,a=a_3,b=b,loc = mu, scale = sigma)
+    denom = (1-truncnorm.cdf(df['third_ord'].values,a=a_3,b=b,loc = mu, scale = sigma)) ** 2
+    ll = -np.mean(np.log(num_1*num_2/denom))
+    return ll
+
+est_2 = minimize(ll_first_third, x0=[2,2], bounds=[(None,None),(1e-6,None)], method="L-BFGS-B")
+
+est_2.x
+
+# Plot values and estimated histogram
+plt.hist(bid_df.submitted_bids,bins=50,density=True,color='skyblue',edgecolor='black', alpha=0.4,label="Bids")
+plt.hist(bid_df.value,bins=50,density=True,color='forestgreen',edgecolor='black', alpha=0.4,label="Values")
+grid = np.linspace(bid_df.value.min(), bid_df.value.max(), 400)
+plt.plot(grid, truncnorm.pdf(grid,a=a_3,b=b, loc=est_2.x[0], scale=est_2.x[1]), linewidth=2)
+plt.xlabel('Valuations')
+plt.ylabel('Frequency')
+plt.title('Values w Estimated Normal Overlay, First and Third Order')
+plt.legend()
+plt.show()
+
+
